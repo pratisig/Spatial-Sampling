@@ -24,12 +24,20 @@ def main():
         print("📥 PyInstaller non détecté. Installation en cours...")
         subprocess.run([sys.executable, "-m", "pip", "install", "pyinstaller"])
         
-    # 2. Lancer la commande de compilation de PyInstaller
-    # --onedir est fortement recommandé pour Streamlit car il évite les latences d'extraction à chaque démarrage
-    # et prévient les conflits de chargement de DLLs (particulièrement pour geopandas, shapely et pyogrio).
-    
+    # 2. Nettoyer les anciens dossiers de compilation
     print()
-    print("⚙️ Compilation en cours, veuillez patienter (cela peut prendre quelques minutes)...")
+    print("🧹 Nettoyage des anciennes compilations...")
+    for folder in ["build", "dist"]:
+        if os.path.exists(folder):
+            try:
+                shutil.rmtree(folder)
+                print(f"   Nettoyé : {folder}/")
+            except Exception as e:
+                print(f"   Impossible de nettoyer {folder} (fichier verrouillé) : {str(e)}")
+                
+    # 3. Lancer la commande de compilation de PyInstaller
+    print()
+    print("⚙️ Compilation PyInstaller en cours (cela peut prendre quelques minutes)...")
     print()
     
     cmd = [
@@ -37,12 +45,16 @@ def main():
         "--noconfirm",
         "--onedir",             # Crée un dossier autonome contenant le .exe (recommandé pour les DLLs géospatiales)
         "--name=Echantillon_Spatial",
-        "--add-data=app.py;.", # Inclut l'application streamlit
+        "--add-data=app.py;.", # Inclut l'application streamlit dans le bundle temporaire
         "--collect-all=streamlit",
         "--collect-all=geopandas",
         "--collect-all=folium",
+        "--collect-all=streamlit_folium", # CRUCIAL : Force la copie des fichiers HTML/JS/CSS statiques du composant de la carte !
         "--collect-all=pyogrio",
         "--collect-all=rtree",
+        "--collect-all=branca",           # Force l'inclusion des dépendances de rendu HTML de folium
+        "--copy-metadata=streamlit",       # Requis pour que Streamlit trouve sa version au démarrage
+        "--copy-metadata=pyogrio",         # Requis pour le chargement correct des métadonnées du pilote de données
         "run_app.py"
     ]
     
@@ -53,6 +65,23 @@ def main():
     result = subprocess.run(cmd)
     
     if result.returncode == 0:
+        # --- SOLUTION MAJEURE DE ROBUSTESSE ---
+        # Copier manuellement app.py directement à la racine du dossier de sortie 'dist/Echantillon_Spatial/'
+        # Cela garantit que le serveur web Streamlit le trouve immédiatement à côté de l'exécutable !
+        print()
+        print("📦 Finalisation du package portable...")
+        
+        src_app = "app.py"
+        dest_folder = os.path.join("dist", "Echantillon_Spatial")
+        dest_app = os.path.join(dest_folder, "app.py")
+        
+        if os.path.exists(src_app):
+            try:
+                shutil.copy(src_app, dest_app)
+                print("   ✅ app.py a été copié avec succès à la racine de l'exécutable !")
+            except Exception as e:
+                print(f"   ⚠️ Erreur lors de la copie de app.py : {str(e)}")
+        
         print()
         print("==========================================================")
         print("🎉 COMPILATION REUSSIE AVEC SUCCES !")
