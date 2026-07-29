@@ -7,6 +7,7 @@ Date: 2026-07-28
 """
 
 import os
+import sys
 import io
 import zipfile
 import tempfile
@@ -1476,44 +1477,50 @@ def main():
                 folium.LayerControl(collapsed=False).add_to(m)
                 
                 # Render Map in Streamlit
-                map_data = st_folium(m, use_container_width=True, height=550, key="sampling_map", returned_objects=["last_clicked", "center", "zoom"])
-                
-                # Conserver le zoom et le centrage lors des rechargements
-                if map_data:
-                    if map_data.get('center'):
-                        st.session_state['map_center'] = [map_data['center']['lat'], map_data['center']['lng']]
-                    if map_data.get('zoom'):
-                        st.session_state['map_zoom'] = map_data['zoom']
-                
-                # Gestionnaire de clic unifié (Sélection et Repositionnement par distance géographique)
-                if map_data and map_data.get('last_clicked'):
-                    click_coords = (map_data['last_clicked']['lat'], map_data['last_clicked']['lng'])
-                    if st.session_state.get('last_handled_click') != click_coords:
-                        st.session_state['last_handled_click'] = click_coords
-                        
-                        lat_clicked, lon_clicked = click_coords
-                        # Calculer la distance en mètres entre le clic et tous les points échantillonnés
-                        # (1 degré lat = ~111,000m, 1 degré lon = ~111,000m * cos(lat))
-                        dists_m = np.sqrt(
-                            ((export_gdf['lat'] - lat_clicked) * 111000)**2 + 
-                            ((export_gdf['lon'] - lon_clicked) * 111000 * np.cos(np.radians(lat_clicked)))**2
-                        )
-                        min_idx = dists_m.idxmin()
-                        min_dist = dists_m[min_idx]
-                        
-                        # Si le clic est à moins de 80 mètres d'un point existant, on le SÉLECTIONNE !
-                        if min_dist < 150.0:
-                            clicked_pt_id = export_gdf.loc[min_idx, 'pt_id']
-                            if st.session_state.get('selected_pt_id') != clicked_pt_id:
-                                st.session_state['selected_pt_id'] = clicked_pt_id
-                                st.toast(f"📍 Point `{clicked_pt_id}` sélectionné !", icon="📍")
+                # Gestion robuste de l'affichage de la carte sous forme d'exécutable compilé
+                if getattr(sys, 'frozen', False):
+                    from streamlit_folium import folium_static
+                    folium_static(m, height=550)
+                    st.info("💡 **Mode Exécutable Portable** : Pour déplacer un point de l'échantillon, saisissez ses coordonnées directement dans l'Option 2 de l'outil d'édition ci-dessous. En mode standard (script .bat), le clic direct sur la carte satellite est activé.")
+                else:
+                    map_data = st_folium(m, use_container_width=True, height=550, key="sampling_map", returned_objects=["last_clicked", "center", "zoom"])
+                    
+                    # Conserver le zoom et le centrage lors des rechargements
+                    if map_data:
+                        if map_data.get('center'):
+                            st.session_state['map_center'] = [map_data['center']['lat'], map_data['center']['lng']]
+                        if map_data.get('zoom'):
+                            st.session_state['map_zoom'] = map_data['zoom']
+                    
+                    # Gestionnaire de clic unifié (Sélection et Repositionnement par distance géographique)
+                    if map_data and map_data.get('last_clicked'):
+                        click_coords = (map_data['last_clicked']['lat'], map_data['last_clicked']['lng'])
+                        if st.session_state.get('last_handled_click') != click_coords:
+                            st.session_state['last_handled_click'] = click_coords
+                            
+                            lat_clicked, lon_clicked = click_coords
+                            # Calculer la distance en mètres entre le clic et tous les points échantillonnés
+                            # (1 degré lat = ~111,000m, 1 degré lon = ~111,000m * cos(lat))
+                            dists_m = np.sqrt(
+                                ((export_gdf['lat'] - lat_clicked) * 111000)**2 + 
+                                ((export_gdf['lon'] - lon_clicked) * 111000 * np.cos(np.radians(lat_clicked)))**2
+                            )
+                            min_idx = dists_m.idxmin()
+                            min_dist = dists_m[min_idx]
+                            
+                            # Si le clic est à moins de 150.0 mètres d'un point existant, on le SÉLECTIONNE !
+                            if min_dist < 150.0:
+                                clicked_pt_id = export_gdf.loc[min_idx, 'pt_id']
+                                if st.session_state.get('selected_pt_id') != clicked_pt_id:
+                                    st.session_state['selected_pt_id'] = clicked_pt_id
+                                    st.toast(f"📍 Point `{clicked_pt_id}` sélectionné !", icon="📍")
+                                    st.rerun()
+                            else:
+                                # Sinon, on considère que c'est la nouvelle position cible
+                                st.session_state['map_click'] = click_coords
+                                st.toast(f"🎯 Nouvelle position cible définie pour `{st.session_state.get('selected_pt_id')}` !", icon="🎯")
                                 st.rerun()
-                        else:
-                            # Sinon, on considère que c'est la nouvelle position cible
-                            st.session_state['map_click'] = click_coords
-                            st.toast(f"🎯 Nouvelle position cible définie pour `{st.session_state.get('selected_pt_id')}` !", icon="🎯")
-                            st.rerun()
-                
+            
             # Outil d'Édition et de Repositionnement Manuel
             st.write("---")
             with st.expander("✍️ Outil d'Édition : Repositionnement Manuel des Points / Point Repositioning Tool", expanded=False):
@@ -1711,7 +1718,11 @@ def main():
                 folium.LayerControl(collapsed=False).add_to(m_preview)
                 
                 # Render preview map
-                st_folium(m_preview, use_container_width=True, height=500, key="preview_map", returned_objects=[])
+                if getattr(sys, 'frozen', False):
+                    from streamlit_folium import folium_static
+                    folium_static(m_preview, height=500)
+                else:
+                    st_folium(m_preview, use_container_width=True, height=500, key="preview_map", returned_objects=[])
 
     else:
         # Prompt user to load datasets in sidebar
