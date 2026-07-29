@@ -1,0 +1,44 @@
+name: Compile Windows Executable
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch: # Permet de lancer la compilation manuellement depuis l'interface GitHub
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Récupérer le code (Checkout)
+      uses: actions/checkout@v4
+
+    - name: Configurer Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip' # Activer le cache pip automatique pour des compilations rapides
+
+    - name: Installer les dépendances
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Compiler avec PyInstaller (build_exe.py)
+      run: |
+        python build_exe.py
+
+    - name: Compresser le dossier d'exécution en ZIP
+      shell: powershell
+      run: |
+        Compress-Archive -Path dist\Echantillon_Spatial -DestinationPath dist\Echantillon_Spatial_Windows.zip
+
+    - name: Téléverser le livrable ZIP sur GitHub (Artifact)
+      uses: actions/upload-artifact@v4
+      with:
+        name: Echantillon_Spatial_Windows_Portable
+        path: dist/Echantillon_Spatial_Windows.zip
+        retention-days: 30 # Le fichier reste téléchargeable pendant 30 jours
