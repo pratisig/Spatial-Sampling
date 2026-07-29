@@ -1,6 +1,11 @@
 # 🌍 Outil d'Échantillonnage Spatial des Ménages (Sans ArcGIS)
 ### *Spatially Constrained Random Sampling for Epidemiological Surveys & Vaccination Campaigns*
 
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io/)
+![Compilation Status](https://github.com/votre-compte/votre-depot/actions/workflows/build.yml/badge.svg)
+
+> **🚀 Déploiement & Compilation Cloud :** Cet outil peut désormais être **exécuté en ligne sur le Web** (SaaS gratuit) ou être **compilé automatiquement sous forme d'exécutable Windows (.exe) portable** directement par les serveurs de GitHub Actions ! (Voir explications plus bas).
+
 Ce projet est une solution complète, open-source et autonome en Python pour réaliser un **échantillonnage spatial aléatoire contraint** de ménages au sein des aires d'influence (catchments) des villages. 
 
 Conçu spécifiquement pour les **épidémiologistes**, les **équipes d'enquêteurs de terrain** et les **campagnes de vaccination** dans le domaine humanitaire et médical, cet outil remplace avantageusement les anciennes boîtes à outils ArcGIS (ArcPy) gourmandes en licences. Il offre une interface cartographique interactive Leaflet moderne et génère des exports directement prêts pour les terminaux mobiles du terrain (OsmAnd, Google Earth).
@@ -36,6 +41,34 @@ Si Python est installé sur l'ordinateur (ou si vous pouvez l'installer facileme
    * *Important* : Cochez impérativement la case **"Add Python.exe to PATH"** (Ajouter Python au PATH) lors de l'installation.
 2. Double-cliquez sur le fichier **`Lancer_Application.bat`**.
 3. Le script va créer un environnement de travail virtuel sécurisé (`.venv`), installer les bibliothèques requises et ouvrir l'application.
+
+### ☁️ MODE D : Déploiement Cloud (SaaS Gratuit sur Internet)
+Puisque le projet est hébergé sur GitHub, vous pouvez le déployer gratuitement sur le Web en 1 clic :
+1. Créez un compte gratuit sur **[Streamlit Community Cloud](https://share.streamlit.io/)**.
+2. Cliquez sur **"New App"**, liez votre compte GitHub, et sélectionnez votre dépôt.
+3. Écrivez **`app.py`** dans le champ *Main file path*, puis cliquez sur **"Deploy!"**.
+4. L'application est en ligne sur une URL publique sécurisée (ex: `https://votre-site.streamlit.app/`), prête pour vos clients ou équipes distantes !
+
+---
+
+## 🤖 Compilation Automatique sous Windows (.exe) via GitHub Actions (CI/CD)
+
+Pour rendre l'outil encore plus professionnel et vous faire gagner du temps, j'ai configuré un outil d'intégration continue **GitHub Actions** (`.github/workflows/build.yml`) :
+
+* **Comment ça marche ?** : 
+  Chaque fois que vous publiez une mise à jour (un `git push`) de votre code sur GitHub, les serveurs cloud de GitHub démarrent automatiquement un ordinateur virtuel Windows temporaire pour vous !
+* **Ce qu'il fait** :
+  1. Il récupère votre code.
+  2. Il installe Python 3.11 et toutes les dépendances de `requirements.txt`.
+  3. Il lance la compilation de l'exécutable à l'aide de notre script de compilation `build_exe.py`.
+  4. Il compresse le dossier final en un fichier **`Echantillon_Spatial_Windows.zip`**.
+  5. Il l'enregistre en tant qu'**Artifact de build** téléchargeable sur votre page GitHub !
+* **Comment télécharger votre exécutable (.exe) prêt à l'emploi depuis GitHub** :
+  1. Allez sur la page de votre dépôt sur GitHub.
+  2. Cliquez sur l'onglet **"Actions"** en haut de la page.
+  3. Cliquez sur le dernier flux de compilation réussi (marqué d'une coche verte `Compile Windows Executable`).
+  4. Descendez tout en bas de la page dans la section **"Artifacts"**.
+  5. Cliquez sur **`Echantillon_Spatial_Windows_Portable`** pour télécharger votre fichier ZIP compilé ! Vous n'avez plus besoin de compiler l'application sur votre propre ordinateur !
 
 ---
 
