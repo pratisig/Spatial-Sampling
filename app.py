@@ -1078,6 +1078,21 @@ def main():
             help=texts['relax_help']
         )
         
+        # Target Map Display Config (Performance Optimization)
+        st.sidebar.subheader("🎨 Affichage de la Carte")
+        show_bld_on_map = st.sidebar.checkbox("Afficher les bâtiments de fond / Show buildings", value=True, help="Décochez cette case pour rendre les cartes extrêmement rapides si vos fichiers contiennent des milliers de points.")
+        if show_bld_on_map:
+            max_bld_display = st.sidebar.slider(
+                "Max bâtiments de fond à afficher",
+                min_value=100,
+                max_value=5000,
+                value=1000,
+                step=100,
+                help="Limite le nombre de points affichés en arrière-plan pour maintenir la fluidité de la carte."
+            )
+        else:
+            max_bld_display = 0
+
         # Target Output Folder Config
         st.sidebar.subheader("💾 Options d'enregistrement")
         output_folder_path = st.sidebar.text_input(
@@ -1436,21 +1451,22 @@ def main():
                 bld_layer = folium.FeatureGroup(name="Tous les Bâtiments", show=False)
                 marker_cluster = MarkerCluster(options={'maxClusterRadius': 40}).add_to(bld_layer)
                 
-                # Reduce to a max of 2000 points in WGS84 for display to prevent browser lag
-                buildings_wgs84 = buildings_df.to_crs(epsg=4326)
-                display_bld = buildings_wgs84.sample(min(2000, len(buildings_wgs84)))
-                
-                for _, row in display_bld.iterrows():
-                    p = row.geometry
-                    folium.CircleMarker(
-                        location=[p.y, p.x],
-                        radius=2,
-                        color="#7f8c8d",
-                        fill=True,
-                        fill_color="#7f8c8d",
-                        fill_opacity=0.6,
-                        popup="Bâtiment"
-                    ).add_to(marker_cluster)
+                # Optimisation de la performance en fonction des choix utilisateur
+                if show_bld_on_map and max_bld_display > 0:
+                    buildings_wgs84 = buildings_df.to_crs(epsg=4326)
+                    display_bld = buildings_wgs84.sample(min(max_bld_display, len(buildings_wgs84)))
+                    
+                    for _, row in display_bld.iterrows():
+                        p = row.geometry
+                        folium.CircleMarker(
+                            location=[p.y, p.x],
+                            radius=2,
+                            color="#7f8c8d",
+                            fill=True,
+                            fill_color="#7f8c8d",
+                            fill_opacity=0.6,
+                            popup="Bâtiment"
+                        ).add_to(marker_cluster)
                 bld_layer.add_to(m)
                 
                 # Add Sampled Households (Red custom pins)
@@ -1483,42 +1499,49 @@ def main():
                     folium_static(m, height=550)
                     st.info("💡 **Mode Exécutable Portable** : Pour déplacer un point de l'échantillon, saisissez ses coordonnées directement dans l'Option 2 de l'outil d'édition ci-dessous. En mode standard (script .bat), le clic direct sur la carte satellite est activé.")
                 else:
-                    map_data = st_folium(m, use_container_width=True, height=550, key="sampling_map", returned_objects=["last_clicked", "center", "zoom"])
+                    # Rendu ultra-fluide : on ne retourne que "last_clicked" pour éviter tout rechargement infini sur zoom/déplacement
+                    map_data = st_folium(m, use_container_width=True, height=550, key="sampling_map", returned_objects=["last_clicked"])
                     
-                    # Conserver le zoom et le centrage lors des rechargements
-                    if map_data:
-                        if map_data.get('center'):
-                            st.session_state['map_center'] = [map_data['center']['lat'], map_data['center']['lng']]
-                        if map_data.get('zoom'):
-                            st.session_state['map_zoom'] = map_data['zoom']
+                    # Initialisation sécurisée du mode de clic
+                    if 'map_click_mode' not in st.session_state:
+                        st.session_state['map_click_mode'] = 'select'
                     
-                    # Gestionnaire de clic unifié (Sélection et Repositionnement par distance géographique)
+                    # Gestionnaire de clic unifié (Sélection et Repositionnement guidé)
                     if map_data and map_data.get('last_clicked'):
                         click_coords = (map_data['last_clicked']['lat'], map_data['last_clicked']['lng'])
                         if st.session_state.get('last_handled_click') != click_coords:
                             st.session_state['last_handled_click'] = click_coords
                             
                             lat_clicked, lon_clicked = click_coords
-                            # Calculer la distance en mètres entre le clic et tous les points échantillonnés
-                            # (1 degré lat = ~111,000m, 1 degré lon = ~111,000m * cos(lat))
-                            dists_m = np.sqrt(
-                                ((export_gdf['lat'] - lat_clicked) * 111000)**2 + 
-                                ((export_gdf['lon'] - lon_clicked) * 111000 * np.cos(np.radians(lat_clicked)))**2
-                            )
-                            min_idx = dists_m.idxmin()
-                            min_dist = dists_m[min_idx]
                             
-                            # Si le clic est à moins de 150.0 mètres d'un point existant, on le SÉLECTIONNE !
-                            if min_dist < 150.0:
-                                clicked_pt_id = export_gdf.loc[min_idx, 'pt_id']
-                                if st.session_state.get('selected_pt_id') != clicked_pt_id:
+                            if st.session_state.get('map_click_mode') == 'select':
+                                # Mode Sélection : Trouver le point le plus proche (rayon d'attraction de 250m)
+                                dists_m = np.sqrt(
+                                    ((export_gdf['lat'] - lat_clicked) * 111000)**2 + 
+                                    ((export_gdf['lon'] - lon_clicked) * 111000 * np.cos(np.radians(lat_clicked)))**2
+                                )
+                                min_idx = dists_m.idxmin()
+                                min_dist = dists_m[min_idx]
+                                
+                                if min_dist < 250.0:
+                                    clicked_pt_id = export_gdf.loc[min_idx, 'pt_id']
                                     st.session_state['selected_pt_id'] = clicked_pt_id
-                                    st.toast(f"📍 Point `{clicked_pt_id}` sélectionné !", icon="📍")
+                                    # Centrer automatiquement la carte sur le point sélectionné
+                                    st.session_state['map_center'] = [lat_clicked, lon_clicked]
+                                    st.session_state['map_zoom'] = 18
+                                    # Basculer automatiquement en mode repositionnement pour un flux fluide !
+                                    st.session_state['map_click_mode'] = 'move'
+                                    st.toast(f"📍 Point `{clicked_pt_id}` sélectionné ! Cliquez sur le toit d'un bâtiment pour définir sa nouvelle cible.", icon="📍")
                                     st.rerun()
+                                else:
+                                    st.toast("💡 Aucun point à proximité. Cliquez plus près d'un point rouge, ou passez en 'Mode Repositionner' dans le panneau du bas.", icon="ℹ️")
                             else:
-                                # Sinon, on considère que c'est la nouvelle position cible
+                                # Mode Repositionnement : Aucune contrainte de distance, définit la position exacte
                                 st.session_state['map_click'] = click_coords
-                                st.toast(f"🎯 Nouvelle position cible définie pour `{st.session_state.get('selected_pt_id')}` !", icon="🎯")
+                                # Conserver le cadrage de carte sur la cible
+                                st.session_state['map_center'] = [lat_clicked, lon_clicked]
+                                st.session_state['map_zoom'] = 18
+                                st.toast(f"🎯 Position cible définie pour `{st.session_state.get('selected_pt_id')}` !", icon="🎯")
                                 st.rerun()
             
             # Outil d'Édition et de Repositionnement Manuel
@@ -1532,6 +1555,24 @@ def main():
                 2. Cliquez n'importe où sur la carte satellite ci-dessus à l'endroit exact où vous souhaitez placer ce point.
                 3. Les coordonnées cliquées s'afficheront ci-dessous. Cliquez sur le bouton vert **"Déplacer le point ici"** pour appliquer le déplacement.
                 """)
+                
+                # Sélecteur de mode de clic interactif et visuel
+                if 'map_click_mode' not in st.session_state:
+                    st.session_state['map_click_mode'] = 'select'
+                
+                st.write("👉 **Mode d'interaction actuel sur la carte :**")
+                click_mode = st.radio(
+                    "Mode d'interaction",
+                    options=["Selection", "Deplacement"],
+                    format_func=lambda x: "📍 Sélectionner un point (cliquez près d'un point rouge sur la carte)" if x == "Selection" else "🎯 Définir la position cible (cliquez sur le toit réel du bâtiment)",
+                    index=0 if st.session_state['map_click_mode'] == 'select' else 1,
+                    horizontal=True,
+                    label_visibility="collapsed"
+                )
+                mapped_mode = 'select' if click_mode == "Selection" else 'move'
+                if mapped_mode != st.session_state['map_click_mode']:
+                    st.session_state['map_click_mode'] = mapped_mode
+                    st.rerun()
                 
                 pt_ids = list(export_gdf['pt_id'].unique())
                 
@@ -1548,9 +1589,13 @@ def main():
                     index=default_idx
                 )
                 
-                # Mettre à jour l'état de session en cas de changement manuel de la boîte de sélection
+                # Mettre à jour l'état de session en cas de changement manuel de la boîte de sélection (et centrer la carte au zoom 18)
                 if selected_pt != st.session_state['selected_pt_id']:
                     st.session_state['selected_pt_id'] = selected_pt
+                    pt_row = export_gdf[export_gdf['pt_id'] == selected_pt].iloc[0]
+                    st.session_state['map_center'] = [pt_row['lat'], pt_row['lon']]
+                    st.session_state['map_zoom'] = 18
+                    st.session_state['map_click_mode'] = 'move' # Basculer directement en mode repositionnement !
                     st.rerun()
                 
                 # Find current row
@@ -1585,6 +1630,10 @@ def main():
                             st.session_state.last_results['sampled_wgs84'] = sampled_all_wgs84
                             
                             st.toast(f"Point {selected_pt} déplacé avec succès !", icon="✅")
+                            # Centrer la carte sur la nouvelle position et repasser en mode Sélection
+                            st.session_state['map_center'] = [clicked_lat, clicked_lon]
+                            st.session_state['map_zoom'] = 18
+                            st.session_state['map_click_mode'] = 'select'
                             # Clear map click
                             st.session_state['map_click'] = None
                             st.rerun()
@@ -1612,6 +1661,10 @@ def main():
                         st.session_state.last_results['sampled_wgs84'] = sampled_all_wgs84
                         
                         st.toast(f"Point {selected_pt} mis à jour !", icon="💾")
+                        # Centrer la carte sur la position saisie et repasser en mode Sélection
+                        st.session_state['map_center'] = [manual_lat, manual_lon]
+                        st.session_state['map_zoom'] = 18
+                        st.session_state['map_click_mode'] = 'select'
                         st.rerun()
 
             # Deployment & User Instructions at the Bottom
@@ -1700,19 +1753,20 @@ def main():
                 bld_layer = folium.FeatureGroup(name="Tous les Bâtiments", show=True)
                 marker_cluster_preview = MarkerCluster(options={'maxClusterRadius': 45}).add_to(bld_layer)
                 
-                # Sample max 1500 buildings for preview speed
-                display_bld_prev = buildings_df.sample(min(1500, len(buildings_df)))
-                for _, row in display_bld_prev.iterrows():
-                    p = row.geometry
-                    folium.CircleMarker(
-                        location=[p.y, p.x],
-                        radius=2,
-                        color="#7f8c8d",
-                        fill=True,
-                        fill_color="#7f8c8d",
-                        fill_opacity=0.6,
-                        popup="Bâtiment"
-                    ).add_to(marker_cluster_preview)
+                # Optimisation de la performance de prévisualisation
+                if show_bld_on_map and max_bld_display > 0:
+                    display_bld_prev = buildings_df.sample(min(max_bld_display, len(buildings_df)))
+                    for _, row in display_bld_prev.iterrows():
+                        p = row.geometry
+                        folium.CircleMarker(
+                            location=[p.y, p.x],
+                            radius=2,
+                            color="#7f8c8d",
+                            fill=True,
+                            fill_color="#7f8c8d",
+                            fill_opacity=0.6,
+                            popup="Bâtiment"
+                        ).add_to(marker_cluster_preview)
                 bld_layer.add_to(m_preview)
                 
                 folium.LayerControl(collapsed=False).add_to(m_preview)
