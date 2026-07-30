@@ -1520,14 +1520,9 @@ def main():
                     st.info("💡 **Mode Exécutable Portable** : Pour déplacer un point de l'échantillon, saisissez ses coordonnées directement dans l'Option 2 de l'outil d'édition ci-dessous. En mode standard (script .bat), le clic direct sur la carte satellite est activé.")
                 else:
                     # Rendu ultra-fluide avec conservation dynamique du centrage et du zoom !
-                    map_data = st_folium(m, use_container_width=True, height=550, key="sampling_map", returned_objects=["last_clicked", "all_drawings", "center", "zoom"])
+                    map_data = st_folium(m, use_container_width=True, height=550, key="sampling_map", returned_objects=["last_clicked", "all_drawings"])
                     
-                    # Conserver le zoom et le centrage lors des mouvements de carte
-                    if map_data:
-                        if map_data.get('center'):
-                            st.session_state['map_center'] = [map_data['center']['lat'], map_data['center']['lng']]
-                        if map_data.get('zoom'):
-                            st.session_state['map_zoom'] = map_data['zoom']
+# Zoom and center state is managed dynamically based on selection and click events
                     
                     # Initialisation sécurisée du mode de clic
                     if 'map_click_mode' not in st.session_state:
