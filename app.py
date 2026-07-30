@@ -1771,14 +1771,14 @@ def main():
                 vil_layer = folium.FeatureGroup(name="Villages d'Origine", show=True)
                 for idx, row in villages_df.iterrows():
                     p = row.geometry
-                    # Try to get name
-                    v_name = str(row[name_field]) if name_field in villages_df.columns else f"Village {idx+1}"
-                    if p.geom_type == 'Point':
-                        folium.Marker(
-                            location=[p.y, p.x],
-                            tooltip=v_name,
-                            icon=folium.Icon(color="blue", icon="info-sign")
-                        ).add_to(vil_layer)
+                    if p is not None:
+                        v_name = str(row[name_field]) if name_field in villages_df.columns else f"Village {idx+1}"
+                        if p.geom_type == 'Point' and hasattr(p, 'y') and hasattr(p, 'x'):
+                            folium.Marker(
+                                location=[p.y, p.x],
+                                tooltip=v_name,
+                                icon=folium.Icon(color="blue", icon="info-sign")
+                            ).add_to(vil_layer)
                     else: # Polygon
                         folium.GeoJson(
                             p,
@@ -1791,20 +1791,21 @@ def main():
                 bld_layer = folium.FeatureGroup(name="Tous les Bâtiments", show=True)
                 marker_cluster_preview = MarkerCluster(options={'maxClusterRadius': 45}).add_to(bld_layer)
                 
-                # Optimisation de la performance de prévisualisation
+                # Optimisation de la performance de prévisualisation (Sécurisée contre les géométries nulles)
                 if show_bld_on_map and max_bld_display > 0:
                     display_bld_prev = buildings_df.sample(min(max_bld_display, len(buildings_df)))
                     for _, row in display_bld_prev.iterrows():
                         p = row.geometry
-                        folium.CircleMarker(
-                            location=[p.y, p.x],
-                            radius=2,
-                            color="#7f8c8d",
-                            fill=True,
-                            fill_color="#7f8c8d",
-                            fill_opacity=0.6,
-                            popup="Bâtiment"
-                        ).add_to(marker_cluster_preview)
+                        if p is not None and hasattr(p, 'y') and hasattr(p, 'x'):
+                            folium.CircleMarker(
+                                location=[p.y, p.x],
+                                radius=2,
+                                color="#7f8c8d",
+                                fill=True,
+                                fill_color="#7f8c8d",
+                                fill_opacity=0.6,
+                                popup="Bâtiment"
+                            ).add_to(marker_cluster_preview)
                 bld_layer.add_to(m_preview)
                 
                 folium.LayerControl(collapsed=False).add_to(m_preview)
