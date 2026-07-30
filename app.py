@@ -1006,6 +1006,15 @@ def main():
             elif isinstance(villages_df, gpd.GeoDataFrame):
                 st.sidebar.success(f"✅ Villages chargés : {len(villages_df)} entités")
                 
+    # Conversion automatique et intelligente des polygones de bâtiments en centroids (Points)
+    if buildings_df is not None and isinstance(buildings_df, gpd.GeoDataFrame):
+        geom_types = buildings_df.geometry.geom_type.unique()
+        is_polygon = any('Polygon' in t for t in geom_types)
+        if is_polygon:
+            # En GeoPandas, .centroid calcule automatiquement le centre de gravité géométrique de chaque polygone
+            buildings_df['geometry'] = buildings_df.geometry.centroid
+            st.sidebar.info("💡 Emprises de bâtiments (Polygones) détectées ! Conversion automatique en points (centroids) réussie.")
+
     # Proceed only if both datasets are successfully loaded
     if villages_df is not None and buildings_df is not None:
         
