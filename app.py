@@ -1492,6 +1492,26 @@ def main():
                 # Add Controls
                 folium.LayerControl(collapsed=False).add_to(m)
                 
+                # Ajout des outils de sélection et d'édition (Leaflet Draw) directement sur la carte !
+                from folium.plugins import Draw
+                draw_tool = Draw(
+                    export=False,
+                    position='topleft',
+                    draw_options={
+                        'polyline': False,
+                        'polygon': False,
+                        'circle': False,
+                        'rectangle': False,
+                        'circlemarker': False,
+                        'marker': True # Permet de placer un nouveau point cible sur la carte
+                    },
+                    edit_options={
+                        'edit': False,
+                        'remove': True # Permet d'effacer les dessins
+                    }
+                )
+                draw_tool.add_to(m)
+                
                 # Render Map in Streamlit
                 # Gestion robuste de l'affichage de la carte sous forme d'exécutable compilé
                 if getattr(sys, 'frozen', False):
@@ -1499,14 +1519,37 @@ def main():
                     folium_static(m, height=550)
                     st.info("💡 **Mode Exécutable Portable** : Pour déplacer un point de l'échantillon, saisissez ses coordonnées directement dans l'Option 2 de l'outil d'édition ci-dessous. En mode standard (script .bat), le clic direct sur la carte satellite est activé.")
                 else:
-                    # Rendu ultra-fluide : on ne retourne que "last_clicked" pour éviter tout rechargement infini sur zoom/déplacement
-                    map_data = st_folium(m, use_container_width=True, height=550, key="sampling_map", returned_objects=["last_clicked"])
+                    # Rendu ultra-fluide avec conservation dynamique du centrage et du zoom !
+                    map_data = st_folium(m, use_container_width=True, height=550, key="sampling_map", returned_objects=["last_clicked", "all_drawings", "center", "zoom"])
+                    
+                    # Conserver le zoom et le centrage lors des mouvements de carte
+                    if map_data:
+                        if map_data.get('center'):
+                            st.session_state['map_center'] = [map_data['center']['lat'], map_data['center']['lng']]
+                        if map_data.get('zoom'):
+                            st.session_state['map_zoom'] = map_data['zoom']
                     
                     # Initialisation sécurisée du mode de clic
                     if 'map_click_mode' not in st.session_state:
                         st.session_state['map_click_mode'] = 'select'
                     
-                    # Gestionnaire de clic unifié (Sélection et Repositionnement guidé)
+                    # 1. Détecter si l'utilisateur a dessiné un point cible sur la carte avec l'outil de dessin Leaflet
+                    if map_data and map_data.get('all_drawings'):
+                        drawings = map_data['all_drawings']
+                        if drawings:
+                            last_drawing = drawings[-1]
+                            if last_drawing.get('geometry') and last_drawing['geometry'].get('type') == 'Point':
+                                draw_lon, draw_lat = last_drawing['geometry']['coordinates']
+                                # Si cette coordonnée de dessin est différente de la dernière gérée, on l'applique
+                                if st.session_state.get('last_handled_drawing_coords') != (draw_lat, draw_lon):
+                                    st.session_state['last_handled_drawing_coords'] = (draw_lat, draw_lon)
+                                    st.session_state['map_click'] = (draw_lat, draw_lon)
+                                    st.session_state['map_center'] = [draw_lat, draw_lon]
+                                    st.session_state['map_zoom'] = 18
+                                    st.toast(f"🎯 Cible de repositionnement définie par l'outil de dessin sur la carte !", icon="🎯")
+                                    st.rerun()
+                    
+                    # 2. Gestionnaire de clic unifié (Sélection et Repositionnement guidé par clic simple)
                     if map_data and map_data.get('last_clicked'):
                         click_coords = (map_data['last_clicked']['lat'], map_data['last_clicked']['lng'])
                         if st.session_state.get('last_handled_click') != click_coords:
@@ -1529,12 +1572,12 @@ def main():
                                     # Centrer automatiquement la carte sur le point sélectionné
                                     st.session_state['map_center'] = [lat_clicked, lon_clicked]
                                     st.session_state['map_zoom'] = 18
-                                    # Basculer automatiquement en mode repositionnement pour un flux fluide !
+                                    # Basculer automatiquement en mode repositionnement !
                                     st.session_state['map_click_mode'] = 'move'
-                                    st.toast(f"📍 Point `{clicked_pt_id}` sélectionné ! Cliquez sur le toit d'un bâtiment pour définir sa nouvelle cible.", icon="📍")
+                                    st.toast(f"📍 Point `{clicked_pt_id}` sélectionné ! Vous pouvez cliquer sur la carte ou utiliser l'outil de dessin (icône repère) pour définir sa cible.", icon="📍")
                                     st.rerun()
                                 else:
-                                    st.toast("💡 Aucun point à proximité. Cliquez plus près d'un point rouge, ou passez en 'Mode Repositionner' dans le panneau du bas.", icon="ℹ️")
+                                    st.toast("💡 Aucun point à proximité. Cliquez plus près d'un point rouge, ou utilisez la boîte de sélection ci-dessous.", icon="ℹ️")
                             else:
                                 # Mode Repositionnement : Aucune contrainte de distance, définit la position exacte
                                 st.session_state['map_click'] = click_coords
@@ -1544,7 +1587,7 @@ def main():
                                 st.toast(f"🎯 Position cible définie pour `{st.session_state.get('selected_pt_id')}` !", icon="🎯")
                                 st.rerun()
             
-            # Outil d'Édition et de Repositionnement Manuel
+                        # Outil d'Édition et de Repositionnement Manuel
             st.write("---")
             with st.expander("✍️ Outil d'Édition : Repositionnement Manuel des Points / Point Repositioning Tool", expanded=False):
                 st.markdown("""
