@@ -10,7 +10,7 @@
 :: Ne nécessite AUCUN droit d'administrateur !
 :: ==============================================================================
 
-title Echantillonnage Spatial des Menages - Arena.ai
+title Echantillonnage Spatial des Menages - Pratisig Consulting Services
 
 echo =====================================================================
 echo    🌍 OUTIL D'ECHANTILLONNAGE SPATIAL DES MENAGES (SANS ARCGIS) 🌍
@@ -95,8 +95,9 @@ echo.
 echo [Etape 3/3] Lancement de l'application dans votre navigateur...
 echo.
 
-:: Lancer Streamlit
-%PYTHON_CMD% -m streamlit run "%~dp0app.py"
+:: Lancer Streamlit uniquement en local (127.0.0.1) pour contourner l'alerte du Pare-feu Windows
+:: et s'exécuter sans aucun droit d'administration !
+%PYTHON_CMD% -m streamlit run "%~dp0app.py" --server.address=127.0.0.1 --server.port=8501 --server.headless=true
 
 echo.
 echo L'application s'est arretee normalement.
