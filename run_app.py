@@ -2,11 +2,12 @@
 """
 Point d'entrée pour la compilation en exécutable Windows (.exe)
 Lance l'application Streamlit de manière programmatique de façon autonome.
+Priorise la recherche de app.py à côté de l'exécutable.
 
-CRUCIAL : Nous importons ici explicitement TOUTES les bibliothèques tierces
-utilisées dans app.py. Comme app.py est chargé dynamiquement par Streamlit 
-lors de l'exécution, PyInstaller ne peut pas détecter ses imports de manière statique.
-En les important ici, nous forçons PyInstaller à les inclure dans le package compilé.
+SÉCURITÉ PARE-FEU / DROITS ADMIN :
+Pour éviter l'alerte du Pare-feu Windows (qui exige les droits d'administrateur),
+nous forçons Streamlit à s'exécuter uniquement sur l'adresse de boucle locale 
+127.0.0.1 (localhost) au lieu de l'adresse réseau publique 0.0.0.0.
 
 Conception : Pratisig Consulting Services
 """
@@ -51,8 +52,16 @@ if __name__ == '__main__':
         print(f"ERREUR : Impossible de localiser le fichier app.py dans {base_dir} ou dans le cache temporaire.")
         sys.exit(1)
     
-    # Configurer les arguments système pour lancer Streamlit programmatoirement
-    sys.argv = ["streamlit", "run", app_path, "--global.developmentMode=false"]
+    # Configurer les arguments système pour lancer Streamlit uniquement en local (localhost)
+    # L'argument '--server.address=127.0.0.1' indique à Streamlit de ne pas s'ouvrir sur le réseau public,
+    # ce qui contourne de fait l'alerte de sécurité du Pare-feu Windows et évite de demander les droits d'admin !
+    sys.argv = [
+        "streamlit", "run", app_path, 
+        "--global.developmentMode=false",
+        "--server.address=127.0.0.1",
+        "--server.port=8501",
+        "--server.headless=true" # Évite d'ouvrir une invite demandant l'email de l'utilisateur
+    ]
     
     # Lancer le serveur Streamlit
     sys.exit(stcli.main())
