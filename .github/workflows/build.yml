@@ -1,0 +1,57 @@
+name: Compile Windows Executable
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Récupérer le code (Checkout)
+      uses: actions/checkout@v4
+
+    - name: Configurer Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Installer les dépendances
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Compiler avec PyInstaller (build_exe.py)
+      run: |
+        python build_exe.py
+
+    - name: Compresser le dossier d'exécution en ZIP
+      shell: powershell
+      run: |
+        Compress-Archive -Path dist\Echantillon_Spatial -DestinationPath dist\Echantillon_Spatial_Windows.zip -CompressionLevel Optimal
+
+    - name: Publier le livrable sur GitHub Release (hors quota Artifacts)
+      if: github.event_name != 'pull_request'
+      shell: pwsh
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        $ErrorActionPreference = 'Continue'
+        $PSNativeCommandUseErrorActionPreference = $false
+
+        gh release delete latest --yes --cleanup-tag 2>$null
+
+        $notes = "Build portable auto-genere ($(Get-Date -Format 'yyyy-MM-dd HH:mm')). Decompressez le ZIP puis double-cliquez sur Echantillon_Spatial.exe."
+        gh release create latest "dist\Echantillon_Spatial_Windows.zip" `
+          --title "Echantillon Spatial V2 - Build portable Windows" `
+          --notes $notes `
+          --latest
