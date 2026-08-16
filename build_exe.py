@@ -14,6 +14,53 @@ import os
 import sys
 import subprocess
 import shutil
+import zipfile
+
+
+# Fichiers/dossiers à inclure dans le ZIP "source portable" (avec lanceur .bat).
+SOURCE_ZIP_FILES = [
+    "app.py",
+    "run_app.py",
+    "offline_folium.py",
+    "requirements.txt",
+    "Lancer_Application.bat",
+    "README.md",
+    "Guide_Utilisation_Echantillonnage.md",
+    "Manuel_Methodologique_Echantillonnage.md",
+]
+SOURCE_ZIP_DIRS = [
+    "assets",
+    "tools",
+]
+
+
+def create_source_portable_zip():
+    """
+    Crée un second livrable : un ZIP "source portable" destiné aux machines
+    QUI ONT Python installé. On le lance via Lancer_Application.bat (qui crée
+    un .venv local et installe les dépendances), sans avoir besoin du .exe.
+    """
+    out_path = os.path.join("dist", "Echantillon_Spatial_Source_Portable.zip")
+    print()
+    print("[ZIP] Creation du ZIP 'source portable' avec lanceur .bat...")
+    with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for fname in SOURCE_ZIP_FILES:
+            if os.path.isfile(fname):
+                zf.write(fname, fname)
+                print(f"   + {fname}")
+        for d in SOURCE_ZIP_DIRS:
+            if os.path.isdir(d):
+                for root, _, files in os.walk(d):
+                    for f in files:
+                        full = os.path.join(root, f)
+                        # Ignorer les éventuels caches
+                        if "__pycache__" in root or f.endswith(".pyc"):
+                            continue
+                        zf.write(full, full)
+                print(f"   + {d}/ (arborescence)")
+    print(f"   [OK] {out_path}")
+    return out_path
+
 
 def main():
     print("==========================================================")
@@ -101,22 +148,51 @@ def main():
     
     if result.returncode == 0:
         # --- SOLUTION MAJEURE DE ROBUSTESSE ---
-        # Copier manuellement app.py directement à la racine du dossier de sortie 'dist/Echantillon_Spatial/'
-        # Cela garantit que le serveur web Streamlit le trouve immédiatement à côté de l'exécutable !
+        # Copier manuellement les fichiers nécessaires À LA RACINE du dossier de
+        # sortie 'dist/Echantillon_Spatial/' (à côté de l'exécutable) :
+        #   - app.py (exécuté par Streamlit)
+        #   - offline_folium.py (importé par app.py -> rendu carte hors-ligne)
+        #   - assets/folium/ (Leaflet + plugins, utilisés par offline_folium)
+        #   - Lancer_Echantillon_Spatial.bat (lanceur qui garde la console ouverte)
         print()
         print("[PACKAGING] Finalisation du package portable...")
-        
-        src_app = "app.py"
+
         dest_folder = os.path.join("dist", "Echantillon_Spatial")
-        dest_app = os.path.join(dest_folder, "app.py")
-        
-        if os.path.exists(src_app):
+        os.makedirs(dest_folder, exist_ok=True)
+
+        extra_files = [
+            "app.py",
+            "offline_folium.py",
+            "Lancer_Echantillon_Spatial.bat",
+        ]
+        for fname in extra_files:
+            if os.path.exists(fname):
+                try:
+                    shutil.copy(fname, os.path.join(dest_folder, fname))
+                    print(f"   [OK] {fname} copie a cote de l'executable.")
+                except Exception as e:
+                    print(f"   [WARNING] Impossible de copier {fname} : {str(e)}")
+            else:
+                print(f"   [WARNING] {fname} introuvable, ignore.")
+
+        # Copier les assets de carte hors-ligne (Leaflet + plugins)
+        src_assets = os.path.join("assets", "folium")
+        if os.path.isdir(src_assets):
+            dest_assets = os.path.join(dest_folder, "assets", "folium")
             try:
-                shutil.copy(src_app, dest_app)
-                print("   [OK] app.py a ete copie avec succes a la racine de l'executable !")
+                if os.path.isdir(dest_assets):
+                    shutil.rmtree(dest_assets)
+                shutil.copytree(src_assets, dest_assets)
+                print("   [OK] assets/folium copie a cote de l'executable.")
             except Exception as e:
-                print(f"   [WARNING] Erreur lors de la copie de app.py : {str(e)}")
-        
+                print(f"   [WARNING] Impossible de copier assets/folium : {str(e)}")
+
+        # Créer le second livrable : ZIP "source portable" avec lanceur .bat
+        try:
+            create_source_portable_zip()
+        except Exception as e:
+            print(f"   [WARNING] Impossible de creer le ZIP source portable : {str(e)}")
+
         print()
         print("==========================================================")
         print("   [SUCCESS] COMPILATION REUSSIE AVEC SUCCES !")
