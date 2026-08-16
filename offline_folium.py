@@ -53,12 +53,18 @@ DROP_URLS = {
 
 
 def _assets_dir():
-    if getattr(sys, "frozen", False):
-        # Exécutable PyInstaller : les assets sont dans le bundle (_MEIPASS).
-        base = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
-        return os.path.join(base, "assets", "folium")
-    # Mode script : à côté de ce fichier.
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "folium")
+    # 1) À côté de ce fichier offline_folium.py (dossier du repo, ou dossier
+    #    de l'exécutable quand il y est copié par build_exe.py).
+    local = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "folium")
+    if os.path.isdir(local):
+        return local
+    # 2) Dans le bundle PyInstaller (_MEIPASS), en secours.
+    base = getattr(sys, "_MEIPASS", None)
+    if base:
+        bundled = os.path.join(base, "assets", "folium")
+        if os.path.isdir(bundled):
+            return bundled
+    return local
 
 
 def _to_data_uri(fname):
