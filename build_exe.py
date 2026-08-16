@@ -40,17 +40,43 @@ def main():
             except Exception as e:
                 print(f"   Impossible de nettoyer {folder} (fichier verrouille) : {str(e)}")
                 
+    # 2bis. Vendor les assets Folium (Leaflet + plugins) pour un rendu carte HORS-LIGNE.
+    # Ces fichiers (assets/folium/) sont nécessaires pour que la carte s'affiche
+    # sans connexion internet ni accès aux CDN. On les télécharge avant la
+    # compilation si le dossier est absent ou vide.
+    print()
+    print("[ASSETS] Preparation des assets de carte hors-ligne (Leaflet)...")
+    assets_dir = os.path.join("assets", "folium")
+    assets_ready = os.path.isdir(assets_dir) and any(
+        f.endswith((".js", ".css")) for f in os.listdir(assets_dir)
+    )
+    if not assets_ready:
+        vendor_script = os.path.join("tools", "vendor_folium_assets.py")
+        if os.path.exists(vendor_script):
+            print("   Telechargement des assets Folium (npm) en cours...")
+            r = subprocess.run([sys.executable, vendor_script])
+            if r.returncode != 0:
+                print("   [WARNING] Impossible de telecharger les assets : la carte utilisera les CDN.")
+        else:
+            print("   [WARNING] tools/vendor_folium_assets.py introuvable : la carte utilisera les CDN.")
+    else:
+        print("   Assets deja presents, rien a telecharger.")
+
     # 3. Lancer la commande de compilation de PyInstaller
     print()
     print("[COMPILING] Compilation PyInstaller en cours (cela peut prendre quelques minutes)...")
     print()
-    
+
+    # Séparateur de chemin pour --add-data (';' sous Windows, ':' sinon)
+    sep = ";" if sys.platform == "win32" else ":"
+
     cmd = [
         "pyinstaller",
         "--noconfirm",
         "--onedir",             # Crée un dossier autonome contenant le .exe (recommandé pour les DLLs géospatiales)
         "--name=Echantillon_Spatial",
-        "--add-data=app.py;.", # Inclut l'application streamlit dans le bundle temporaire
+        "--add-data=app.py%s." % sep, # Inclut l'application streamlit dans le bundle temporaire
+        "--add-data=assets/folium%sassets/folium" % sep,  # Assets de carte hors-ligne (Leaflet + plugins)
         "--collect-all=streamlit",
         "--collect-all=geopandas",
         "--collect-all=folium",
@@ -60,13 +86,17 @@ def main():
         "--collect-all=branca",           # Force l'inclusion des dépendances de rendu HTML de folium
         "--copy-metadata=streamlit",       # Requis pour que Streamlit trouve sa version au démarrage
         "--copy-metadata=pyogrio",         # Requis pour le chargement correct des métadonnées du pilote de données
+        # --- REDUCTION DE LA TAILLE DU BUNDLE (le quota GitHub Actions est de 500 Mo) ---
+        # Ces modules ne sont pas utilisés par l'application : on les exclut
+        # pour alléger fortement le dossier portable et le ZIP final.
+        "--exclude-module=tkinter",        # Non utilisé (application web, pas d'UI desktop)
+        "--exclude-module=IPython",        # Non utilisé
+        "--exclude-module=pytest",         # Non utilisé (outil de test uniquement)
+        "--exclude-module=matplotlib",     # Retiré de requirements.txt (jamais importé)
+        "--exclude-module=scipy",          # Retiré de requirements.txt (jamais importé)
         "run_app.py"
     ]
-    
-    # Ajuster le séparateur de chemin si on compile depuis une autre plateforme pour test
-    if sys.platform != "win32":
-        cmd[4] = "--add-data=app.py:."
-        
+
     result = subprocess.run(cmd)
     
     if result.returncode == 0:

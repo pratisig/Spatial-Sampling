@@ -58,9 +58,10 @@ if __name__ == '__main__':
     sys.argv = [
         "streamlit", "run", app_path, 
         "--global.developmentMode=false",
+        "--browser.gatherUsageStats=false",  # Désactive la question d'e-mail de bienvenue
         "--server.address=127.0.0.1",
         "--server.port=8501",
-        "--server.headless=true" # Évite d'ouvrir une invite demandant l'email de l'utilisateur
+        "--server.headless=false"  # Ouvre AUTOMATIQUEMENT le navigateur au lancement
     ]
     
     # Lancer le serveur Streamlit

@@ -25,6 +25,10 @@ import folium
 from streamlit_folium import st_folium
 from folium.plugins import MarkerCluster
 
+# Rendu des cartes 100% hors-ligne (Leaflet + plugins embarqués, sans CDN).
+import offline_folium
+offline_folium.patch_folium_offline()
+
 # Set Page Config
 st.set_page_config(
     page_title="🌍 Échantillonnage Spatial des Ménages / Spatial Sampling",
