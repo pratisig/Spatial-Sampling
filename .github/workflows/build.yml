@@ -34,10 +34,10 @@ jobs:
       run: |
         python build_exe.py
 
-    - name: Compresser le dossier d'exécution en ZIP
+    - name: Compresser l'exécutable en ZIP (partage simplifié)
       shell: powershell
       run: |
-        Compress-Archive -Path dist\Echantillon_Spatial -DestinationPath dist\Echantillon_Spatial_Windows.zip -CompressionLevel Optimal
+        Compress-Archive -Path dist\Echantillon_Spatial.exe -DestinationPath dist\Echantillon_Spatial_Windows.zip -CompressionLevel Optimal
 
     - name: Publier le livrable sur GitHub Release (hors quota Artifacts)
       if: github.event_name != 'pull_request'
