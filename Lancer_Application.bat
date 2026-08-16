@@ -97,8 +97,7 @@ echo.
 
 :: Lancer Streamlit uniquement en local (127.0.0.1) pour contourner l'alerte du Pare-feu Windows
 :: et s'exécuter sans aucun droit d'administration !
-%PYTHON_CMD% -m streamlit run "%~dp0app.py" --server.address=127.0.0.1 --server.port=8501 --server.headless=true
-
+%PYTHON_CMD% -m streamlit run "%~dp0app.py" --server.address=127.0.0.1 --server.port=8501 --server.headless=false --browser.gatherUsageStats=false
 echo.
 echo L'application s'est arretee normalement.
 pause
