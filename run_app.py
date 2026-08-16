@@ -51,6 +51,13 @@ if __name__ == '__main__':
     if not os.path.exists(app_path):
         print(f"ERREUR : Impossible de localiser le fichier app.py dans {base_dir} ou dans le cache temporaire.")
         sys.exit(1)
+
+    # IMPORTANT : ajouter le dossier de app.py au sys.path pour que ses imports
+    # locaux (ex: `import offline_folium`) fonctionnent, même quand app.py est
+    # exécuté depuis le dossier de l'exécutable compilé.
+    app_dir = os.path.dirname(os.path.abspath(app_path))
+    if app_dir and app_dir not in sys.path:
+        sys.path.insert(0, app_dir)
     
     # Configurer les arguments système pour lancer Streamlit uniquement en local (localhost)
     # L'argument '--server.address=127.0.0.1' indique à Streamlit de ne pas s'ouvrir sur le réseau public,
