@@ -1,13 +1,21 @@
 # -*- coding: utf-8 -*-
 """
 Script d'automatisation de la compilation de l'application en exécutable Windows (.exe)
-Utilise PyInstaller pour générer un dossier autonome portable.
+Utilise PyInstaller pour générer un EXE UNIQUE AUTONOME (mode --onefile).
 Conception : Pratisig Consulting Services
 
 SÉCURITÉ ENCODAGE WINDOWS / GITHUB ACTIONS :
 Tous les caractères emoji spéciaux (Unicode) ont été supprimés des print() console 
 pour éviter les erreurs 'UnicodeEncodeError' (cp1252/cp850) lors de la compilation
 dans l'environnement cloud Windows de GitHub Actions.
+
+NOTE MODE --onefile :
+- Produit UN SEUL fichier Echantillon_Spatial.exe, facile à partager.
+- Au lancement, le .exe extrait son contenu dans un dossier temporaire puis
+  démarre : le premier démarrage est un peu plus lent (10-30 s selon la machine).
+- Le .exe est plus volumineux qu'en mode --onedir (toutes les DLLs sont dedans).
+- Si le mode --onefile posait un problème avec les DLLs géospatiales (GDAL/pyogrio),
+  revenir au mode --onedir : remplacer "--onefile" par "--onedir" ci-dessous.
 """
 
 import os
@@ -53,7 +61,6 @@ def create_source_portable_zip():
                 for root, _, files in os.walk(d):
                     for f in files:
                         full = os.path.join(root, f)
-                        # Ignorer les éventuels caches
                         if "__pycache__" in root or f.endswith(".pyc"):
                             continue
                         zf.write(full, full)
@@ -88,9 +95,6 @@ def main():
                 print(f"   Impossible de nettoyer {folder} (fichier verrouille) : {str(e)}")
                 
     # 2bis. Vendor les assets Folium (Leaflet + plugins) pour un rendu carte HORS-LIGNE.
-    # Ces fichiers (assets/folium/) sont nécessaires pour que la carte s'affiche
-    # sans connexion internet ni accès aux CDN. On les télécharge avant la
-    # compilation si le dossier est absent ou vide.
     print()
     print("[ASSETS] Preparation des assets de carte hors-ligne (Leaflet)...")
     assets_dir = os.path.join("assets", "folium")
@@ -111,7 +115,7 @@ def main():
 
     # 3. Lancer la commande de compilation de PyInstaller
     print()
-    print("[COMPILING] Compilation PyInstaller en cours (cela peut prendre quelques minutes)...")
+    print("[COMPILING] Compilation PyInstaller en cours (cela peut prendre plusieurs minutes)...")
     print()
 
     # Séparateur de chemin pour --add-data (';' sous Windows, ':' sinon)
@@ -120,72 +124,33 @@ def main():
     cmd = [
         "pyinstaller",
         "--noconfirm",
-        "--onedir",             # Crée un dossier autonome contenant le .exe (recommandé pour les DLLs géospatiales)
+        "--onefile",             # UN SEUL fichier .exe à partager
         "--name=Echantillon_Spatial",
-        "--add-data=app.py%s." % sep, # Inclut l'application streamlit dans le bundle temporaire
+        "--add-data=app.py%s." % sep, # Inclut l'application streamlit dans le bundle
         "--add-data=assets/folium%sassets/folium" % sep,  # Assets de carte hors-ligne (Leaflet + plugins)
+        "--hidden-import=offline_folium",  # module importé par app.py -> rendu carte hors-ligne
         "--collect-all=streamlit",
         "--collect-all=geopandas",
         "--collect-all=folium",
-        "--collect-all=streamlit_folium", # Force la copie des ressources statiques du composant cartographique
+        "--collect-all=streamlit_folium",
         "--collect-all=pyogrio",
         "--collect-all=rtree",
-        "--collect-all=branca",           # Force l'inclusion des dépendances de rendu HTML de folium
-        "--copy-metadata=streamlit",       # Requis pour que Streamlit trouve sa version au démarrage
-        "--copy-metadata=pyogrio",         # Requis pour le chargement correct des métadonnées du pilote de données
-        # --- REDUCTION DE LA TAILLE DU BUNDLE (le quota GitHub Actions est de 500 Mo) ---
-        # Ces modules ne sont pas utilisés par l'application : on les exclut
-        # pour alléger fortement le dossier portable et le ZIP final.
-        "--exclude-module=tkinter",        # Non utilisé (application web, pas d'UI desktop)
-        "--exclude-module=IPython",        # Non utilisé
-        "--exclude-module=pytest",         # Non utilisé (outil de test uniquement)
-        "--exclude-module=matplotlib",     # Retiré de requirements.txt (jamais importé)
-        "--exclude-module=scipy",          # Retiré de requirements.txt (jamais importé)
+        "--collect-all=branca",
+        "--copy-metadata=streamlit",
+        "--copy-metadata=pyogrio",
+        "--exclude-module=tkinter",
+        "--exclude-module=IPython",
+        "--exclude-module=pytest",
+        "--exclude-module=matplotlib",
+        "--exclude-module=scipy",
         "run_app.py"
     ]
 
     result = subprocess.run(cmd)
     
     if result.returncode == 0:
-        # --- SOLUTION MAJEURE DE ROBUSTESSE ---
-        # Copier manuellement les fichiers nécessaires À LA RACINE du dossier de
-        # sortie 'dist/Echantillon_Spatial/' (à côté de l'exécutable) :
-        #   - app.py (exécuté par Streamlit)
-        #   - offline_folium.py (importé par app.py -> rendu carte hors-ligne)
-        #   - assets/folium/ (Leaflet + plugins, utilisés par offline_folium)
-        #   - Lancer_Echantillon_Spatial.bat (lanceur qui garde la console ouverte)
         print()
-        print("[PACKAGING] Finalisation du package portable...")
-
-        dest_folder = os.path.join("dist", "Echantillon_Spatial")
-        os.makedirs(dest_folder, exist_ok=True)
-
-        extra_files = [
-            "app.py",
-            "offline_folium.py",
-            "Lancer_Echantillon_Spatial.bat",
-        ]
-        for fname in extra_files:
-            if os.path.exists(fname):
-                try:
-                    shutil.copy(fname, os.path.join(dest_folder, fname))
-                    print(f"   [OK] {fname} copie a cote de l'executable.")
-                except Exception as e:
-                    print(f"   [WARNING] Impossible de copier {fname} : {str(e)}")
-            else:
-                print(f"   [WARNING] {fname} introuvable, ignore.")
-
-        # Copier les assets de carte hors-ligne (Leaflet + plugins)
-        src_assets = os.path.join("assets", "folium")
-        if os.path.isdir(src_assets):
-            dest_assets = os.path.join(dest_folder, "assets", "folium")
-            try:
-                if os.path.isdir(dest_assets):
-                    shutil.rmtree(dest_assets)
-                shutil.copytree(src_assets, dest_assets)
-                print("   [OK] assets/folium copie a cote de l'executable.")
-            except Exception as e:
-                print(f"   [WARNING] Impossible de copier assets/folium : {str(e)}")
+        print("[PACKAGING] Finalisation...")
 
         # Créer le second livrable : ZIP "source portable" avec lanceur .bat
         try:
@@ -197,15 +162,14 @@ def main():
         print("==========================================================")
         print("   [SUCCESS] COMPILATION REUSSIE AVEC SUCCES !")
         print("==========================================================")
-        print("   Votre application autonome est disponible dans le dossier :")
-        print("   dist\\Echantillon_Spatial\\")
+        print("   Votre application autonome est un SEUL fichier :")
+        print("   dist\\Echantillon_Spatial.exe")
         print()
         print("   Comment la distribuer a vos collegues :")
-        print("   1. Allez dans le dossier 'dist'.")
-        print("   2. Compressez le dossier 'Echantillon_Spatial' en fichier .zip (clic droit -> Envoyer vers -> Dossier compresse).")
-        print("   3. Envoyez ce fichier .zip a vos collegues.")
-        print("   4. Ils n'auront qu'a le decompresser sur n'importe quel PC Windows et double-cliquer sur 'Echantillon_Spatial.exe' pour lancer la carte !")
-        print("   * Aucune installation requise, fonctionne sans aucun droit administrateur !")
+        print("   1. Envoyez le fichier 'dist\\Echantillon_Spatial.exe' (ou son ZIP).")
+        print("   2. Ils double-cliquent sur l'exe : le navigateur s'ouvre et la carte s'affiche.")
+        print("   * Aucune installation requise, sans droit administrateur !")
+        print("   * Au premier lancement, l'exe extrait son contenu : quelques secondes de patience.")
         print("==========================================================")
     else:
         print()
