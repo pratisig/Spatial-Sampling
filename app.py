@@ -1154,23 +1154,41 @@ def main():
                     # 4. Spatial Join to associate each building with its corresponding village catchment
                     # SECURITE : si la couche des batiments contient DEJA une colonne
                     # portant le meme nom que `name_field` (ex: "name"), gpd.sjoin la
-                    # renomme en "name_left"/"name_right", ce qui fait planter le
-                    # groupby(name_field) avec KeyError. On renomme donc la colonne du
-                    # village en un nom unique temporaire avant le join.
+                    # renomme en "name_left"/"name_right" puis le rename ci-dessous
+                    # créerait des doublons -> KeyError au groupby. On gère donc les
+                    # noms de colonnes explicitement :
+                    #   - on renomme la colonne du BATIMENT en "_bld_<name_field>"
+                    #     (elle est conservée, sans conflit) ;
+                    #   - on renomme la colonne du VILLAGE en un nom temporaire unique
+                    #     avant le join, puis on la restaure en `name_field` (la clé
+                    #     de regroupement).
                     tmp_vil_name = "_vil_name_join_tmp"
+
+                    buildings_for_join = buildings_utm.copy()
+                    if name_field in buildings_for_join.columns:
+                        buildings_for_join = buildings_for_join.rename(
+                            columns={name_field: "_bld_" + str(name_field)}
+                        )
+
                     catchments_for_join = catchments_utm[[name_field, 'geometry']].rename(
                         columns={name_field: tmp_vil_name}
                     )
+
                     bld_with_village_utm = gpd.sjoin(
-                        buildings_utm,
+                        buildings_for_join,
                         catchments_for_join,
                         how="inner",
                         predicate="intersects"
                     )
-                    # Rétablir le nom de colonne attendu par la suite du code
-                    bld_with_village_utm = bld_with_village_utm.rename(
-                        columns={tmp_vil_name: name_field}
-                    )
+
+                    # Restaurer le nom de colonne attendu par la suite du code
+                    # (en supprimant un éventuel doublon résiduel par sécurité).
+                    if tmp_vil_name in bld_with_village_utm.columns:
+                        if name_field in bld_with_village_utm.columns:
+                            bld_with_village_utm = bld_with_village_utm.drop(columns=[name_field])
+                        bld_with_village_utm = bld_with_village_utm.rename(
+                            columns={tmp_vil_name: name_field}
+                        )
 
                     # Remove spatial join index columns to avoid confusion
                     if 'index_right' in bld_with_village_utm.columns:
