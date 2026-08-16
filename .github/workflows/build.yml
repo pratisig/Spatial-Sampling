@@ -51,7 +51,7 @@ jobs:
         gh release delete latest --yes --cleanup-tag 2>$null
 
         $notes = "Build portable auto-genere ($(Get-Date -Format 'yyyy-MM-dd HH:mm')). Decompressez le ZIP puis double-cliquez sur Echantillon_Spatial.exe."
-        gh release create latest "dist\Echantillon_Spatial_Windows.zip" `
+        gh release create latest "dist\Echantillon_Spatial_Windows.zip" "dist\Echantillon_Spatial_Source_Portable.zip" `
           --title "Echantillon Spatial V2 - Build portable Windows" `
           --notes $notes `
           --latest
