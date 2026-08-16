@@ -1152,13 +1152,26 @@ def main():
                     buildings_utm = buildings_df.to_crs(epsg=utm_epsg)
                     
                     # 4. Spatial Join to associate each building with its corresponding village catchment
+                    # SECURITE : si la couche des batiments contient DEJA une colonne
+                    # portant le meme nom que `name_field` (ex: "name"), gpd.sjoin la
+                    # renomme en "name_left"/"name_right", ce qui fait planter le
+                    # groupby(name_field) avec KeyError. On renomme donc la colonne du
+                    # village en un nom unique temporaire avant le join.
+                    tmp_vil_name = "_vil_name_join_tmp"
+                    catchments_for_join = catchments_utm[[name_field, 'geometry']].rename(
+                        columns={name_field: tmp_vil_name}
+                    )
                     bld_with_village_utm = gpd.sjoin(
                         buildings_utm,
-                        catchments_utm[[name_field, 'geometry']],
+                        catchments_for_join,
                         how="inner",
                         predicate="intersects"
                     )
-                    
+                    # Rétablir le nom de colonne attendu par la suite du code
+                    bld_with_village_utm = bld_with_village_utm.rename(
+                        columns={tmp_vil_name: name_field}
+                    )
+
                     # Remove spatial join index columns to avoid confusion
                     if 'index_right' in bld_with_village_utm.columns:
                         bld_with_village_utm = bld_with_village_utm.drop(columns='index_right')
